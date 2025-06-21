@@ -1,0 +1,138 @@
+const sheetURL = 'https://opensheet.elk.sh/1FBLEfdtjVozD4VD5dzQ0taYCfVSKtSTqd2zdWMjC5aI/Scoring';
+
+let rawData = [];
+let chartInstance = null;
+
+function renderTable(data) {
+  const tbody = document.querySelector('#scoreTable tbody');
+  tbody.innerHTML = data.map(row => `
+    <tr>
+      <td>${row.Nama}</td>
+      <td>${row.Tarikh}</td>
+      <td>${row.Jenis}</td>
+      <td>${row.Skor}</td>
+      <td><span class="status ${row.Skor >= 80 ? 'good' : row.Skor >= 60 ? 'warning' : 'alert'}">
+        ${row.Skor >= 80 ? 'GOOD' : row.Skor >= 60 ? 'WARNING' : 'ALERT'}
+      </span></td>
+    </tr>`).join('');
+}
+
+function renderChart(data) {
+  const ctx = document.getElementById('chartCanvas').getContext('2d');
+  const labels = data.map(row => row.Tarikh);
+  const scores = data.map(row => parseInt(row.Skor));
+
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Skor Harian',
+        data: scores,
+        fill: false,
+        borderColor: 'blue',
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' },
+        title: { display: true, text: 'Graf Skor Prestasi' }
+      }
+    }
+  });
+}
+
+function exportToPDF() {
+  window.print();
+}
+
+fetch(sheetURL)
+  .then(response => response.json())
+  .then(data => {
+    rawData = data;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Cari Nama Atlet...';
+    input.style = 'margin-bottom: 10px; padding: 8px; width: 100%; max-width: 300px;';
+    document.body.appendChild(input);
+
+    const dateSelect = document.createElement('input');
+    dateSelect.type = 'date';
+    dateSelect.style = 'margin-left: 10px; padding: 8px;';
+    document.body.appendChild(dateSelect);
+
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = '📄 Eksport PDF';
+    exportBtn.style = 'margin-left: 10px; padding: 8px 16px;';
+    exportBtn.onclick = exportToPDF;
+    document.body.appendChild(exportBtn);
+
+    const table = document.createElement('table');
+    table.id = 'scoreTable';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Nama Atlet</th>
+          <th>Tarikh</th>
+          <th>Jenis Skor</th>
+          <th>Skor</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    document.body.appendChild(table);
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'chartCanvas';
+    canvas.style = 'margin-top: 30px; max-width: 100%;';
+    document.body.appendChild(canvas);
+
+    renderTable(data);
+    renderChart(data);
+
+    function applyFilters() {
+      const nameKeyword = input.value.toLowerCase();
+      const selectedDate = dateSelect.value;
+
+      const filtered = rawData.filter(row => {
+        const matchName = row.Nama.toLowerCase().includes(nameKeyword);
+        const matchDate = selectedDate ? row.Tarikh === selectedDate : true;
+        return matchName && matchDate;
+      });
+
+      renderTable(filtered);
+      renderChart(filtered);
+    }
+
+    input.addEventListener('input', applyFilters);
+    dateSelect.addEventListener('input', applyFilters);
+  })
+  .catch(error => console.error('Ralat semasa memuat data:', error));
+
+const style = document.createElement('style');
+style.innerHTML = `
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; font-family: sans-serif; }
+  th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+  th { background: #2c3e50; color: white; }
+  tr:nth-child(even) { background: #ecf0f1; }
+  .status { padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+  .good { background-color: #2ecc71; color: white; }
+  .warning { background-color: #f39c12; color: white; }
+  .alert { background-color: #e74c3c; color: white; }
+  input { font-size: 16px; margin-bottom: 10px; }
+  button { font-size: 16px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 5px; }
+  @media print {
+    input, button, canvas { display: none !important; }
+    table { page-break-inside: auto; }
+  }
+`;
+document.head.appendChild(style);
+
+const chartScript = document.createElement('script');
+chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+document.head.appendChild(chartScript);
